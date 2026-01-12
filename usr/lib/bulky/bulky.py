@@ -2,6 +2,7 @@
 import gettext
 import gi
 import locale
+import logging
 import os
 import re
 import setproctitle
@@ -9,6 +10,10 @@ import warnings
 import sys
 import functools
 import unidecode
+
+# Setup logging
+logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
 
 # Suppress GTK deprecation warnings
 warnings.filterwarnings("ignore")
@@ -122,9 +127,9 @@ class FileObject():
                     self.icon = Gio.ThemedIcon.new("text-x-generic")
         except GLib.Error as e:
             if e.code == Gio.IOErrorEnum.NOT_FOUND:
-                print("file %s does not exist" % self.uri)
+                logger.warning("file %s does not exist", self.uri)
             else:
-                print(e.message)
+                logger.error("GLib error: %s", str(e))
             self.is_valid = False
             return
 
@@ -134,10 +139,10 @@ class FileObject():
         backup_gfile = self.gfile.dup()
         try:
             new_gfile = self.gfile.set_display_name(new_name, None)
-        except:
+        except Exception as e:
             # This can fail - make sure the GFile is still in a pre-fail state
-            # (not sure this is necessary), then let the caller handle telling
-            # the user.
+            # then let the caller handle telling the user.
+            logger.debug("Rename failed, reverting: %s", str(e))
             self.gfile = backup_gfile
             raise
 
@@ -543,7 +548,7 @@ class MainWindow():
                 new_name = self.model.get_value(iter, COL_NEW_NAME)
                 rename_list.append((iter, file_obj, name, new_name))
             except Exception as e:
-                print(e)
+                logger.exception("Error processing file")
 
         rename_list = self.sort_list_by_depth(rename_list)
 
@@ -606,7 +611,7 @@ class MainWindow():
 
         if file_obj.is_valid:
             if file_obj.uri in self.uris:
-                print("%s is already loaded, ignoring" % file_obj.uri)
+                logger.debug("%s is already loaded, ignoring", file_obj.uri)
                 return
             self.uris.append(file_obj.uri)
             iter = self.model.insert_before(None, None)
@@ -658,8 +663,8 @@ class MainWindow():
                 file_obj = self.model.get_value(iter, COL_FILE)
                 any_dirs = file_obj.is_a_dir() or any_dirs
                 iter = self.model.iter_next(iter)
-            except:
-                pass
+            except Exception as e:
+                logger.debug("Failed to set icon name fallback: %s", str(e))
 
         combo = self.builder.get_object("combo_scope")
 
@@ -710,7 +715,7 @@ class MainWindow():
                 self.renamed_uris.append(renamed_uri)
                 any_changes = (new_name != orig_name) or any_changes
             except Exception as e:
-                print(e)
+                logger.exception("Error applying operation")
                 self.infobar.show()
                 self.error_label.set_text("'%s' %s." % (file_obj.get_path_or_uri_for_display(), str(e)))
                 self.model.set_value(iter, COL_NEW_NAME, orig_name)
@@ -806,13 +811,6 @@ class MainWindow():
             width = len(zeros) + 1
             return f"{index:0{width}d}"
         return re.sub(r'%([0]*)n', repl, string)
-
-'''
-TODO
-----
-- translations
-
-'''
 
 if __name__ == "__main__":
     application = MyApplication("org.x.bulky", Gio.ApplicationFlags.FLAGS_NONE)
