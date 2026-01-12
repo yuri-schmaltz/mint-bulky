@@ -217,6 +217,26 @@ Notas:
 - Startup acima mede o tempo de importação do módulo (proxy de cold start sem UI/Glade). Para medir a janela real, use um display virtual (e.g., `xvfb-run`) e capture `application.run()`.
 - Rename throughput mede latência do kernel para `rename(2)` em 500 arquivos temporários (aproxima o custo de I/O, independente de UI).
 
+### ✅ GUI Startup (janela real)
+```bash
+$ python3 gui_benchmark.py
+GUI Benchmark Summary:
+  runs: 3
+  ok: 3
+  wall_ms_min: 776.70
+  wall_ms_avg: 781.16
+  wall_ms_max: 785.13
+  inline_ms_min: 581
+  inline_ms_avg: 592.67
+  inline_ms_max: 601
+  used_xvfb: False
+```
+
+Notas:
+- `wall_ms_*` é o tempo de parede da execução completa (processo) por iteração.
+- `inline_ms_*` é o tempo (ms) medido de dentro do app: do `MyApplication` até a ativação da janela e agendamento do quit.
+- Em CI/headless, instale e use `xvfb-run -a` automaticamente (script já tenta detectar).
+
 ### ✅ Diagnóstico
 ```bash
 $ python3 diagnostics.py
