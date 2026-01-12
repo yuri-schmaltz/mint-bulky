@@ -197,6 +197,26 @@ Ran 14 tests in 0.002s
 OK
 ```
 
+### ✅ Micro-benchmarks (BULKY_TELEMETRY=1)
+```bash
+$ python3 benchmarks.py
+Bulky micro-benchmarks
+ROOT: /home/yurix/Documentos/mint-bulky
+
+[1] Startup (module import)
+  import_time_ms: min=0.91 avg=23.64 max=113.21
+
+[2] Memory (import)
+  max_rss_kb: 43840
+
+[3] Rename throughput (filesystem)
+  files: 500, per_file_ms: 0.021, throughput_files_per_s: 48004.03
+```
+
+Notas:
+- Startup acima mede o tempo de importação do módulo (proxy de cold start sem UI/Glade). Para medir a janela real, use um display virtual (e.g., `xvfb-run`) e capture `application.run()`.
+- Rename throughput mede latência do kernel para `rename(2)` em 500 arquivos temporários (aproxima o custo de I/O, independente de UI).
+
 ### ✅ Diagnóstico
 ```bash
 $ python3 diagnostics.py
