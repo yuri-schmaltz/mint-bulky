@@ -724,6 +724,11 @@ class MainWindow():
             index += 1
         self.rename_button.set_sensitive(any_changes)
 
+    @functools.lru_cache(maxsize=32)
+    def _compile_regex(self, pattern, flags):
+        """Cache compiled regex patterns to avoid recompilation."""
+        return re.compile(pattern, flags)
+
     def replace_text(self, index, string):
         case = self.replace_case_check.get_active()
         regex = self.replace_regex_check.get_active()
@@ -736,23 +741,18 @@ class MainWindow():
         replace = self.inject((index-1)*inc + start, replace)
         try:
             if regex:
-                if case:
-                    return re.sub(find, replace, string)
-                else:
-                    reg = re.compile(find, re.IGNORECASE)
-                    return reg.sub(replace, string)
+                flags = 0 if case else re.IGNORECASE
+                reg = self._compile_regex(find, flags)
+                return reg.sub(replace, string)
             else:
                 find = find.replace("*", "~~~REGSTAR~~~")
                 find = find.replace("?", "~~~REGQUES~~~")
                 find = re.escape(find)
                 find = find.replace(re.escape("~~~REGSTAR~~~"), ".+")
                 find = find.replace(re.escape("~~~REGQUES~~~"), ".")
-                if case:
-                    reg = re.compile(find)
-                    return reg.sub(replace, string)
-                else:
-                    reg = re.compile(find, re.IGNORECASE)
-                    return reg.sub(replace, string)
+                flags = 0 if case else re.IGNORECASE
+                reg = self._compile_regex(find, flags)
+                return reg.sub(replace, string)
         except re.error:
             return string
 
