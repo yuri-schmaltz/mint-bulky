@@ -11,6 +11,9 @@ import sys
 import functools
 import unidecode
 import time
+import threading
+import hashlib
+from pathlib import Path
 
 # Setup logging
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
@@ -114,6 +117,8 @@ class FileObject():
             "standard::type",
             "standard::icon",
             "standard::edit-name",
+            "standard::size",
+            "time::modified",
             "access::can-write",
             "thumbnail::path",
             "thumbnail::is-valid"
@@ -126,14 +131,9 @@ class FileObject():
             if self.info.get_file_type() == Gio.FileType.DIRECTORY:
                 self.icon = Gio.ThemedIcon.new("folder")
             else:
-                thumb_ok = self.info.get_attribute_boolean("thumbnail::is-valid")
-
-                if thumb_ok:
-                    thumb_path = self.info.get_attribute_byte_string("thumbnail::path")
-                    if thumb_path and os.path.exists(thumb_path):
-                        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(thumb_path, 22 *  self.scale, 22 * self.scale, True)
-                        if pixbuf is not None:
-                            self.pixbuf = pixbuf
+                # Defer thumbnail loading to lazy path (UI renderer)
+                # Keep metadata only; pixbuf will be populated asynchronously
+                self.pixbuf = None
 
                 info_icon = self.info.get_icon()
 
@@ -233,6 +233,14 @@ class MainWindow():
         self.uris = []
         self.renamed_uris = []
         self.last_chooser_location = Gio.File.new_for_path(GLib.get_home_dir())
+
+        # Thumbnail cache and async helpers
+        self._thumb_cache_dir = Path(os.path.expanduser("~/.cache/bulky/thumbnails"))
+        try:
+            self._thumb_cache_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.debug("Failed to create cache dir: %s", str(e))
+        self._thumb_pending = set()
 
         # Set the Glade file
         gladefile = "/usr/share/bulky/bulky.ui"
@@ -424,7 +432,14 @@ class MainWindow():
         self.replace_entry.set_tooltip_text(variables_tooltip)
         self.insert_entry.set_tooltip_text(variables_tooltip)
 
-        self.load_files(sys.argv[1:], initial_load=True)
+        # Defer initial load to after window shows, improving first paint
+        def _deferred_initial_load():
+            try:
+                self.load_files(sys.argv[1:], initial_load=True)
+            except Exception as e:
+                logger.debug("Deferred initial load failed: %s", str(e))
+            return False
+        GLib.idle_add(_deferred_initial_load)
 
     def on_drag_data_received(self, widget, context, x, y, data, info, _time, user_data=None):
         if data:
@@ -443,6 +458,7 @@ class MainWindow():
     def data_func_icon(self, column, cell, model, iter_, *args):
         pixbuf = model.get_value(iter_, COL_PIXBUF)
         icon = model.get_value(iter_, COL_ICON)
+        file_obj = model.get_value(iter_, COL_FILE)
 
         if pixbuf is not None:
             surface = Gdk.cairo_surface_create_from_pixbuf(pixbuf, self.window.get_scale_factor())
@@ -451,6 +467,90 @@ class MainWindow():
         else:
             cell.set_property("surface", None)
             cell.set_property("gicon", icon)
+            # Trigger lazy async thumbnail loading (non-dir only)
+            try:
+                if file_obj and (not file_obj.is_a_dir()) and file_obj.uri not in self._thumb_pending:
+                    self._thumb_pending.add(file_obj.uri)
+                    self._load_thumbnail_async(iter_, file_obj)
+            except Exception as e:
+                logger.debug("Lazy thumbnail queue failed: %s", str(e))
+
+    def _thumb_cache_path(self, file_obj: 'FileObject'):
+        try:
+            mtime = 0
+            if file_obj.gfile.is_native():
+                try:
+                    path = file_obj.gfile.get_path()
+                    if path and os.path.exists(path):
+                        mtime = int(os.path.getmtime(path))
+                except Exception:
+                    mtime = 0
+            key_raw = f"{file_obj.uri}|{mtime}|{self.window.get_scale_factor()}"
+            key = hashlib.sha256(key_raw.encode('utf-8')).hexdigest()
+            return self._thumb_cache_dir / f"{key}.png"
+        except Exception as e:
+            logger.debug("Cache key error: %s", str(e))
+            return None
+
+    def _load_thumbnail_async(self, iter_, file_obj: 'FileObject'):
+        # Run in a background thread to avoid blocking UI
+        def worker():
+            pix = None
+            try:
+                cache_path = self._thumb_cache_path(file_obj)
+                if cache_path and cache_path.exists():
+                    try:
+                        pix = GdkPixbuf.Pixbuf.new_from_file(str(cache_path))
+                    except Exception:
+                        pix = None
+                if pix is None:
+                    # Try Gio thumbnail first
+                    thumb_path = None
+                    try:
+                        thumb_path = file_obj.info.get_attribute_byte_string("thumbnail::path")
+                        thumb_ok = file_obj.info.get_attribute_boolean("thumbnail::is-valid")
+                    except Exception:
+                        thumb_ok = False
+                    if thumb_ok and thumb_path and os.path.exists(thumb_path):
+                        pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(thumb_path, 22 * self.window.get_scale_factor(), 22 * self.window.get_scale_factor(), True)
+                    # Fallback: render themed icon to pixbuf
+                    if pix is None:
+                        try:
+                            icon = file_obj.icon
+                            if icon:
+                                theme = self.icon_theme
+                                info = theme.lookup_by_gicon(icon, 22, Gtk.IconLookupFlags.FORCE_SIZE)
+                                if info:
+                                    pix = info.load_icon()
+                        except Exception:
+                            pix = None
+                # Save to cache if new pix
+                if pix is not None:
+                    try:
+                        cache_path = self._thumb_cache_path(file_obj)
+                        if cache_path:
+                            pix.savev(str(cache_path), 'png', [], [])
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.debug("Thumb worker error: %s", str(e))
+            finally:
+                # Update UI on GTK main loop
+                def apply_pix():
+                    try:
+                        if pix is not None:
+                            try:
+                                self.model.set_value(iter_, COL_PIXBUF, pix)
+                            except Exception:
+                                pass
+                        self._thumb_pending.discard(file_obj.uri)
+                    except Exception:
+                        pass
+                    return False
+                GLib.idle_add(apply_pix)
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
 
     def open_about(self, widget):
         dlg = Gtk.AboutDialog()
@@ -548,44 +648,64 @@ class MainWindow():
         self.infobar.show()
 
     def on_rename_button(self, widget):
+        # Build list first
         iters = []
         iter = self.model.get_iter_first()
         while iter != None:
             iters.append(iter)
             iter = self.model.iter_next(iter)
-        # We're modifying the model here, so we iterate
-        # through our own list of iters rather than the model
-        # itself
+
         rename_list = []
-        for iter in iters:
+        for it in iters:
             try:
-                file_obj = self.model.get_value(iter, COL_FILE)
-                name = self.model.get_value(iter, COL_NAME)
-                new_name = self.model.get_value(iter, COL_NEW_NAME)
-                rename_list.append((iter, file_obj, name, new_name))
-            except Exception as e:
+                file_obj = self.model.get_value(it, COL_FILE)
+                name = self.model.get_value(it, COL_NAME)
+                new_name = self.model.get_value(it, COL_NEW_NAME)
+                rename_list.append((it, file_obj, name, new_name))
+            except Exception:
                 logger.exception("Error processing file")
 
         rename_list = self.sort_list_by_depth(rename_list)
 
-        # for i in rename_list:
-        #     print(i[0].gfile.get_uri())
+        # Disable button and run asynchronously
+        self.rename_button.set_sensitive(False)
+        self.window.set_sensitive(False)
 
-        for tup in rename_list:
-                iter, file_obj, name, new_name = tup
+        def worker():
+            for tup in rename_list:
+                it, file_obj, name, new_name = tup
                 if new_name != name:
                     try:
                         old_uri = file_obj.uri
-                        # print("Renaming %s --> %s" % (file_obj.get_path_or_uri_for_display(), new_name))
-                        if file_obj.rename(new_name):
-                            self.uris.remove(old_uri)
-                            self.uris.append(file_obj.uri)
-                            self.model.set_value(iter, COL_NAME, new_name)
+                        success = file_obj.rename(new_name)
+                        if success:
+                            def apply_update():
+                                try:
+                                    if old_uri in self.uris:
+                                        self.uris.remove(old_uri)
+                                    self.uris.append(file_obj.uri)
+                                    self.model.set_value(it, COL_NAME, new_name)
+                                except Exception:
+                                    pass
+                                return False
+                            GLib.idle_add(apply_update)
                     except GLib.Error as e:
-                        self.report_os_error(file_obj, new_name, e)
+                        def apply_err():
+                            self.report_os_error(file_obj, new_name, e)
+                            return False
+                        GLib.idle_add(apply_err)
                         break
+            # Re-enable UI at the end
+            def done():
+                try:
+                    self.window.set_sensitive(True)
+                    self.rename_button.set_sensitive(False)
+                except Exception:
+                    pass
+                return False
+            GLib.idle_add(done)
 
-        self.rename_button.set_sensitive(False)
+        threading.Thread(target=worker, daemon=True).start()
 
     def sort_list_by_depth(self, rename_list):
         # Rename files first, followed by directories from deep to shallow.
