@@ -10,10 +10,26 @@ import warnings
 import sys
 import functools
 import unidecode
+import time
 
 # Setup logging
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
+
+# Performance telemetry (disabled by default, enable via env var)
+ENABLE_TELEMETRY = os.getenv('BULKY_TELEMETRY', '0') == '1'
+_perf_markers = {}
+
+def mark_time(label):
+    """Record timing marker for performance analysis."""
+    if ENABLE_TELEMETRY:
+        _perf_markers[label] = time.time()
+
+def elapsed_ms(label):
+    """Get elapsed time in ms since marker."""
+    if ENABLE_TELEMETRY and label in _perf_markers:
+        return (time.time() - _perf_markers[label]) * 1000
+    return 0
 
 # Suppress GTK deprecation warnings
 warnings.filterwarnings("ignore")
