@@ -284,6 +284,40 @@ class MainWindow():
         accel_group = Gtk.AccelGroup()
         self.window.add_accel_group(accel_group)
         menu = self.builder.get_object("main_menu")
+        
+        # Tools submenu
+        tools_item = Gtk.MenuItem(label=_("Tools"))
+        tools_menu = Gtk.Menu()
+        tools_item.set_submenu(tools_menu)
+        
+        # EXIF Renamer
+        item = Gtk.ImageMenuItem(label=_("Rename by EXIF Date..."))
+        item.set_image(Gtk.Image.new_from_icon_name("camera-photo-symbolic", Gtk.IconSize.MENU))
+        item.connect("activate", self.on_tool_exif_rename)
+        tools_menu.append(item)
+        
+        # ID3 Renamer
+        item = Gtk.ImageMenuItem(label=_("Rename by ID3 Tags..."))
+        item.set_image(Gtk.Image.new_from_icon_name("audio-x-generic-symbolic", Gtk.IconSize.MENU))
+        item.connect("activate", self.on_tool_id3_rename)
+        tools_menu.append(item)
+        
+        # Hash Renamer
+        item = Gtk.ImageMenuItem(label=_("Rename by Hash..."))
+        item.set_image(Gtk.Image.new_from_icon_name("document-properties-symbolic", Gtk.IconSize.MENU))
+        item.connect("activate", self.on_tool_hash_rename)
+        tools_menu.append(item)
+        
+        # Normalize Names
+        item = Gtk.ImageMenuItem(label=_("Normalize Names..."))
+        item.set_image(Gtk.Image.new_from_icon_name("preferences-desktop-locale-symbolic", Gtk.IconSize.MENU))
+        item.connect("activate", self.on_tool_normalize)
+        tools_menu.append(item)
+        
+        tools_menu.append(Gtk.SeparatorMenuItem())
+        menu.append(tools_item)
+        
+        # About
         item = Gtk.ImageMenuItem()
         item.set_image(Gtk.Image.new_from_icon_name("xsi-help-about-symbolic", Gtk.IconSize.MENU))
         item.set_label(_("About"))
@@ -291,6 +325,8 @@ class MainWindow():
         key, mod = Gtk.accelerator_parse("F1")
         item.add_accelerator("activate", accel_group, key, mod, Gtk.AccelFlags.VISIBLE)
         menu.append(item)
+        
+        # Quit
         item = Gtk.ImageMenuItem(label=_("Quit"))
         image = Gtk.Image.new_from_icon_name("xsi-exit-symbolic", Gtk.IconSize.MENU)
         item.set_image(image)
@@ -551,6 +587,466 @@ class MainWindow():
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
+
+    def on_tool_exif_rename(self, widget):
+        """EXIF-based photo renaming tool."""
+        try:
+            from PIL import Image
+            from PIL.ExifTags import TAGS
+        except ImportError:
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.ERROR,
+                buttons=Gtk.ButtonsType.OK,
+                text=_("Pillow library required")
+            )
+            dialog.format_secondary_text(
+                _("Please install Pillow:\npip3 install --user Pillow")
+            )
+            dialog.run()
+            dialog.destroy()
+            return
+        
+        # Dialog for EXIF options
+        dialog = Gtk.Dialog(
+            title=_("Rename by EXIF Date"),
+            transient_for=self.window,
+            flags=0
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OK, Gtk.ResponseType.OK
+        )
+        dialog.set_default_size(400, 200)
+        
+        box = dialog.get_content_area()
+        box.set_spacing(6)
+        box.set_margin_top(12)
+        box.set_margin_bottom(12)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        
+        label = Gtk.Label(label=_("Format: YYYYMMDD_HHMMSS_NNN.ext"))
+        box.pack_start(label, False, False, 0)
+        
+        # Prefix option
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        hbox.pack_start(Gtk.Label(label=_("Prefix:")), False, False, 0)
+        prefix_entry = Gtk.Entry()
+        prefix_entry.set_text("")
+        prefix_entry.set_placeholder_text(_("Optional (e.g., 'vacation_')"))
+        hbox.pack_start(prefix_entry, True, True, 0)
+        box.pack_start(hbox, False, False, 6)
+        
+        # Info label
+        info_label = Gtk.Label()
+        info_label.set_markup(_("<small>Only processes JPEG files with EXIF DateTimeOriginal</small>"))
+        box.pack_start(info_label, False, False, 6)
+        
+        box.show_all()
+        
+        response = dialog.run()
+        prefix = prefix_entry.get_text()
+        dialog.destroy()
+        
+        if response == Gtk.ResponseType.OK:
+            self._run_exif_rename(prefix)
+    
+    def _run_exif_rename(self, prefix=""):
+        """Execute EXIF rename on loaded files."""
+        from datetime import datetime
+        try:
+            from PIL import Image
+            from PIL.ExifTags import TAGS
+        except ImportError:
+            return
+        
+        counter = 1
+        renamed_count = 0
+        
+        iter = self.model.get_iter_first()
+        while iter is not None:
+            file_obj = self.model.get_value(iter, COL_FILE)
+            old_name = file_obj.name
+            
+            # Only process images
+            if not old_name.lower().endswith(('.jpg', '.jpeg', '.JPG', '.JPEG')):
+                iter = self.model.iter_next(iter)
+                continue
+            
+            # Extract EXIF date
+            exif_date = None
+            try:
+                if file_obj.gfile.is_native():
+                    path = file_obj.gfile.get_path()
+                    img = Image.open(path)
+                    exif = img._getexif()
+                    if exif:
+                        for tag, value in exif.items():
+                            if TAGS.get(tag) == 'DateTimeOriginal':
+                                exif_date = datetime.strptime(value, '%Y:%m:%d %H:%M:%S')
+                                break
+            except Exception as e:
+                logger.debug(f"EXIF error for {old_name}: {e}")
+            
+            if exif_date:
+                ext = os.path.splitext(old_name)[1].lower()
+                new_name = f"{prefix}{exif_date.strftime('%Y%m%d_%H%M%S')}_{counter:03d}{ext}"
+                self.model.set_value(iter, COL_NEW_NAME, new_name)
+                renamed_count += 1
+            
+            counter += 1
+            iter = self.model.iter_next(iter)
+        
+        # Refresh preview
+        self.preview_changes()
+        
+        # Show result
+        if renamed_count > 0:
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text=_("EXIF Rename Complete")
+            )
+            dialog.format_secondary_text(
+                _("{} files renamed based on EXIF data.\nClick 'Rename' to apply changes.").format(renamed_count)
+            )
+            dialog.run()
+            dialog.destroy()
+        else:
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.OK,
+                text=_("No EXIF data found")
+            )
+            dialog.format_secondary_text(_("No JPEG files with valid EXIF DateTimeOriginal found."))
+            dialog.run()
+            dialog.destroy()
+
+    def on_tool_id3_rename(self, widget):
+        """ID3-based music renaming tool."""
+        import subprocess
+        
+        # Check for ffprobe
+        try:
+            subprocess.run(['ffprobe', '-version'], capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.ERROR,
+                buttons=Gtk.ButtonsType.OK,
+                text=_("ffprobe required")
+            )
+            dialog.format_secondary_text(_("Please install ffmpeg:\nsudo apt install ffmpeg"))
+            dialog.run()
+            dialog.destroy()
+            return
+        
+        # Simple confirmation dialog
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            flags=0,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.OK_CANCEL,
+            text=_("Rename by ID3 Tags")
+        )
+        dialog.format_secondary_text(
+            _("Format: Artist_-_Title.mp3\n\nOnly processes MP3 files with ID3 tags.")
+        )
+        
+        response = dialog.run()
+        dialog.destroy()
+        
+        if response == Gtk.ResponseType.OK:
+            self._run_id3_rename()
+    
+    def _run_id3_rename(self):
+        """Execute ID3 rename on loaded files."""
+        import subprocess
+        
+        renamed_count = 0
+        
+        iter = self.model.get_iter_first()
+        while iter is not None:
+            file_obj = self.model.get_value(iter, COL_FILE)
+            old_name = file_obj.name
+            
+            # Only process MP3
+            if not old_name.lower().endswith(('.mp3', '.MP3')):
+                iter = self.model.iter_next(iter)
+                continue
+            
+            # Extract ID3 tags
+            artist = None
+            title = None
+            try:
+                if file_obj.gfile.is_native():
+                    path = file_obj.gfile.get_path()
+                    
+                    # Get artist
+                    result = subprocess.run(
+                        ['ffprobe', '-v', 'quiet', '-show_entries', 'format_tags=artist',
+                         '-of', 'default=noprint_wrappers=1:nokey=1', path],
+                        capture_output=True, text=True
+                    )
+                    if result.returncode == 0:
+                        artist = result.stdout.strip()
+                    
+                    # Get title
+                    result = subprocess.run(
+                        ['ffprobe', '-v', 'quiet', '-show_entries', 'format_tags=title',
+                         '-of', 'default=noprint_wrappers=1:nokey=1', path],
+                        capture_output=True, text=True
+                    )
+                    if result.returncode == 0:
+                        title = result.stdout.strip()
+            except Exception as e:
+                logger.debug(f"ID3 error for {old_name}: {e}")
+            
+            if artist and title:
+                # Clean strings
+                artist_clean = unidecode.unidecode(artist).replace(' ', '_')
+                title_clean = unidecode.unidecode(title).replace(' ', '_')
+                new_name = f"{artist_clean}_-_{title_clean}.mp3"
+                self.model.set_value(iter, COL_NEW_NAME, new_name)
+                renamed_count += 1
+            
+            iter = self.model.iter_next(iter)
+        
+        # Refresh preview
+        self.preview_changes()
+        
+        # Show result
+        if renamed_count > 0:
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text=_("ID3 Rename Complete")
+            )
+            dialog.format_secondary_text(
+                _("{} files renamed based on ID3 tags.\nClick 'Rename' to apply changes.").format(renamed_count)
+            )
+            dialog.run()
+            dialog.destroy()
+        else:
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.OK,
+                text=_("No ID3 tags found")
+            )
+            dialog.format_secondary_text(_("No MP3 files with valid ID3 artist/title found."))
+            dialog.run()
+            dialog.destroy()
+
+    def on_tool_hash_rename(self, widget):
+        """Hash-based file renaming tool."""
+        # Dialog for hash options
+        dialog = Gtk.Dialog(
+            title=_("Rename by Hash"),
+            transient_for=self.window,
+            flags=0
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OK, Gtk.ResponseType.OK
+        )
+        dialog.set_default_size(400, 200)
+        
+        box = dialog.get_content_area()
+        box.set_spacing(6)
+        box.set_margin_top(12)
+        box.set_margin_bottom(12)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        
+        label = Gtk.Label(label=_("Format: <hash>.<ext>"))
+        box.pack_start(label, False, False, 0)
+        
+        # Algorithm choice
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        hbox.pack_start(Gtk.Label(label=_("Algorithm:")), False, False, 0)
+        algo_combo = Gtk.ComboBoxText()
+        algo_combo.append("sha256", "SHA256")
+        algo_combo.append("sha1", "SHA1")
+        algo_combo.append("md5", "MD5")
+        algo_combo.set_active(0)
+        hbox.pack_start(algo_combo, True, True, 0)
+        box.pack_start(hbox, False, False, 6)
+        
+        # Length option
+        hbox2 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        hbox2.pack_start(Gtk.Label(label=_("Hash length:")), False, False, 0)
+        length_spin = Gtk.SpinButton()
+        length_spin.set_range(8, 64)
+        length_spin.set_value(16)
+        length_spin.set_increments(1, 8)
+        hbox2.pack_start(length_spin, True, True, 0)
+        box.pack_start(hbox2, False, False, 6)
+        
+        # Info label
+        info_label = Gtk.Label()
+        info_label.set_markup(_("<small>Useful for deduplication and content-based naming</small>"))
+        box.pack_start(info_label, False, False, 6)
+        
+        box.show_all()
+        
+        response = dialog.run()
+        algorithm = algo_combo.get_active_id()
+        length = int(length_spin.get_value())
+        dialog.destroy()
+        
+        if response == Gtk.ResponseType.OK:
+            self._run_hash_rename(algorithm, length)
+    
+    def _run_hash_rename(self, algorithm="sha256", length=16):
+        """Execute hash-based rename on loaded files."""
+        renamed_count = 0
+        seen_hashes = set()
+        
+        iter = self.model.get_iter_first()
+        while iter is not None:
+            file_obj = self.model.get_value(iter, COL_FILE)
+            old_name = file_obj.name
+            
+            # Calculate hash
+            file_hash = None
+            try:
+                if file_obj.gfile.is_native():
+                    path = file_obj.gfile.get_path()
+                    h = hashlib.new(algorithm)
+                    with open(path, 'rb') as f:
+                        while chunk := f.read(65536):
+                            h.update(chunk)
+                    file_hash = h.hexdigest()[:length]
+            except Exception as e:
+                logger.debug(f"Hash error for {old_name}: {e}")
+            
+            if file_hash:
+                # Check for duplicates
+                if file_hash in seen_hashes:
+                    logger.warning(f"Duplicate hash {file_hash} for {old_name}")
+                else:
+                    seen_hashes.add(file_hash)
+                    ext = os.path.splitext(old_name)[1]
+                    new_name = f"{file_hash}{ext}"
+                    self.model.set_value(iter, COL_NEW_NAME, new_name)
+                    renamed_count += 1
+            
+            iter = self.model.iter_next(iter)
+        
+        # Refresh preview
+        self.preview_changes()
+        
+        # Show result
+        if renamed_count > 0:
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text=_("Hash Rename Complete")
+            )
+            dialog.format_secondary_text(
+                _("{} files renamed by hash.\nClick 'Rename' to apply changes.").format(renamed_count)
+            )
+            dialog.run()
+            dialog.destroy()
+        else:
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.OK,
+                text=_("Hash rename failed")
+            )
+            dialog.format_secondary_text(_("Unable to hash files. Check permissions."))
+            dialog.run()
+            dialog.destroy()
+
+    def on_tool_normalize(self, widget):
+        """Normalize file names (remove accents, special chars, etc.)."""
+        # Simple confirmation dialog
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            flags=0,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.OK_CANCEL,
+            text=_("Normalize Names")
+        )
+        dialog.format_secondary_text(
+            _("This will:\n• Remove accents\n• Convert to lowercase\n• Replace spaces with underscores\n• Remove special characters")
+        )
+        
+        response = dialog.run()
+        dialog.destroy()
+        
+        if response == Gtk.ResponseType.OK:
+            self._run_normalize()
+    
+    def _run_normalize(self):
+        """Execute name normalization on loaded files."""
+        renamed_count = 0
+        
+        iter = self.model.get_iter_first()
+        while iter is not None:
+            file_obj = self.model.get_value(iter, COL_FILE)
+            old_name = file_obj.name
+            
+            # Split name and extension
+            base, ext = os.path.splitext(old_name)
+            
+            # Normalize base name
+            normalized = unidecode.unidecode(base)
+            normalized = normalized.lower()
+            normalized = normalized.replace(' ', '_')
+            normalized = re.sub(r'[^a-z0-9._-]', '', normalized)
+            normalized = re.sub(r'__+', '_', normalized)
+            
+            if normalized and normalized != base:
+                new_name = normalized + ext.lower()
+                self.model.set_value(iter, COL_NEW_NAME, new_name)
+                renamed_count += 1
+            
+            iter = self.model.iter_next(iter)
+        
+        # Refresh preview
+        self.preview_changes()
+        
+        # Show result
+        if renamed_count > 0:
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text=_("Normalization Complete")
+            )
+            dialog.format_secondary_text(
+                _("{} files normalized.\nClick 'Rename' to apply changes.").format(renamed_count)
+            )
+            dialog.run()
+            dialog.destroy()
+        else:
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text=_("Already Normalized")
+            )
+            dialog.format_secondary_text(_("All file names are already normalized."))
+            dialog.run()
+            dialog.destroy()
 
     def open_about(self, widget):
         dlg = Gtk.AboutDialog()
