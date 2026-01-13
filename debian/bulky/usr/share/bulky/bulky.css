@@ -1,0 +1,129 @@
+/* Bulky Custom Styles - Accessibility and Visual Focus */
+
+/* Enhanced focus indicators for keyboard navigation */
+treeview:focus row:selected {
+    outline: 2px solid @theme_selected_bg_color;
+    outline-offset: 2px;
+}
+
+button:focus {
+    box-shadow: 0 0 0 2px @theme_selected_bg_color;
+    outline: none;
+}
+
+entry:focus {
+    border-width: 2px;
+    border-color: @theme_selected_bg_color;
+    box-shadow: 0 0 0 1px @theme_selected_bg_color;
+}
+
+combobox:focus {
+    outline: 2px solid @theme_selected_bg_color;
+    outline-offset: 1px;
+}
+
+checkbutton:focus,
+radiobutton:focus {
+    outline: 2px solid @theme_selected_bg_color;
+    outline-offset: 2px;
+}
+
+spinbutton:focus {
+    border-width: 2px;
+    border-color: @theme_selected_bg_color;
+}
+
+/* Enhanced visual hierarchy for primary actions */
+.suggested-action {
+    background-image: linear-gradient(to bottom, 
+        shade(@theme_selected_bg_color, 1.1),
+        @theme_selected_bg_color);
+    color: @theme_selected_fg_color;
+    font-weight: bold;
+}
+
+.suggested-action:hover {
+    background-image: linear-gradient(to bottom,
+        shade(@theme_selected_bg_color, 1.2),
+        shade(@theme_selected_bg_color, 1.1));
+}
+
+.destructive-action {
+    background-image: linear-gradient(to bottom,
+        shade(@error_color, 1.1),
+        @error_color);
+    color: white;
+}
+
+.destructive-action:hover {
+    background-image: linear-gradient(to bottom,
+        shade(@error_color, 1.2),
+        shade(@error_color, 1.1));
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    *:focus {
+        outline-width: 3px;
+        outline-offset: 3px;
+    }
+    
+    button:focus {
+        box-shadow: 0 0 0 3px @theme_selected_bg_color;
+    }
+}
+
+/* Improved disabled state visibility */
+*:disabled {
+    opacity: 0.5;
+}
+
+button:disabled {
+    background-image: none;
+    background-color: shade(@theme_bg_color, 0.95);
+    color: shade(@theme_fg_color, 1.3);
+}
+
+/* Progress bar styling */
+progressbar progress {
+    background-image: linear-gradient(to bottom,
+        shade(@theme_selected_bg_color, 1.1),
+        @theme_selected_bg_color);
+}
+
+progressbar trough {
+    background-color: shade(@theme_bg_color, 0.9);
+    border: 1px solid shade(@theme_bg_color, 0.7);
+}
+
+/* Tooltip improvements */
+tooltip {
+    background-color: rgba(0, 0, 0, 0.9);
+    color: white;
+    border-radius: 4px;
+    padding: 6px 10px;
+}
+
+/* Infobar accessibility */
+infobar {
+    border-radius: 4px;
+    padding: 8px;
+}
+
+infobar.error {
+    background-color: @error_color;
+    color: white;
+    border: 2px solid shade(@error_color, 0.8);
+}
+
+infobar.warning {
+    background-color: @warning_color;
+    color: black;
+    border: 2px solid shade(@warning_color, 0.8);
+}
+
+infobar.info {
+    background-color: @info_color;
+    color: white;
+    border: 2px solid shade(@info_color, 0.8);
+}

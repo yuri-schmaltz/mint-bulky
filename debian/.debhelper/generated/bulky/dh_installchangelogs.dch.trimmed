@@ -1,0 +1,327 @@
+bulky (4.1) zena; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Fri, 12 Dec 2025 16:47:35 +0000
+
+bulky (4.0) zena; urgency=medium
+
+  [ Michael Webster ]
+  * Rework 'Remove' mode behavior.
+
+  [ Leigh Scott ]
+  * Clarify the license as defined in debian/copyright and switch to spdx format (#81)
+
+  [ Clement Lefebvre ]
+  * Switch to XApp symbolic icons
+  * Switch to xapp-symbolic-icons (XSI)
+
+ -- Clement Lefebvre <root@linuxmint.com>  Wed, 19 Nov 2025 16:18:39 +0000
+
+bulky (3.9) zara; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Tue, 26 Aug 2025 17:36:12 +0200
+
+bulky (3.8) zara; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Thu, 31 Jul 2025 11:34:09 +0200
+
+bulky (3.7) zara; urgency=medium
+
+  [ Michael Webster ]
+  * debian/control: Add missing dependency.
+
+  [ Klaus ]
+  * change numbering filenames (#67)
+
+  [ Michael Webster ]
+  * Remember the last operation type and filename scope.
+  * debian/control: Remove unnecessary python3-magic dependency.
+
+  [ hduelme ]
+  * Use auto resource management for license file (#71)
+
+  [ Klaus ]
+  * Fix MRU settings (#75)
+  * Minor optimization of the hint texts (#76)
+
+  [ Çağdaş Alagöz ]
+  * Autosize columns after a line is deleted. (#73)
+  * Assume path is writeable for GVfs mounted paths (#72)
+
+  [ Clement Lefebvre ]
+  * l10n: Update POT
+
+ -- Clement Lefebvre <root@linuxmint.com>  Fri, 25 Jul 2025 15:25:11 +0200
+
+bulky (3.6) xia; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Mon, 06 Jan 2025 13:51:54 +0000
+
+bulky (3.5) xia; urgency=medium
+
+  [ Michał Wójtowicz ]
+  * Added unacenting option in change case (#61)
+
+  [ Clement Lefebvre ]
+  * l10n: Update POT
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Thu, 05 Dec 2024 10:34:59 +0000
+
+bulky (3.4) wilma; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Sun, 21 Jul 2024 10:25:19 +0100
+
+bulky (3.3) wilma; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Tue, 18 Jun 2024 19:14:31 +0100
+
+bulky (3.2) virginia; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Thu, 04 Jan 2024 16:33:30 +0000
+
+bulky (3.1) virginia; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Sun, 03 Dec 2023 14:50:11 +0000
+
+bulky (3.0) virginia; urgency=medium
+
+  [ Michael Webster ]
+  * Support DND for file manager items, or a single text path/uri.
+  * Fix file icons/thumbnails.
+
+  [ Clement Lefebvre ]
+  * Reorder focus chain in the replace page
+
+ -- Clement Lefebvre <root@linuxmint.com>  Tue, 28 Nov 2023 12:25:33 +0000
+
+bulky (2.10) victoria; urgency=medium
+
+  * l10n: Update translations
+
+ -- Clement Lefebvre <root@linuxmint.com>  Fri, 07 Jul 2023 16:31:40 +0200
+
+bulky (2.9) vera; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Thu, 08 Jun 2023 11:29:40 +0100
+
+bulky (2.8) victoria; urgency=medium
+
+  [ Michael Webster ]
+  * Update bulky.ui to newer gtk format.
+  * Explain enumeration in the entry placeholder text.
+
+  [ Clement Lefebvre ]
+  * l10n: Update POT
+
+ -- Clement Lefebvre <root@linuxmint.com>  Wed, 31 May 2023 14:00:47 +0100
+
+bulky (2.7) vera; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Fri, 16 Dec 2022 12:56:33 +0000
+
+bulky (2.6) vanessa; urgency=medium
+
+  [ Michael Webster ]
+  * Add github workflow.
+
+  [ Clement Lefebvre ]
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Fri, 02 Dec 2022 17:17:34 +0000
+
+bulky (2.5) vanessa; urgency=medium
+
+  [ Fenil Mehta ]
+  * Fix infinite loop issue linuxmint/bulky#44 linuxmint/bulky#34 (#47)
+  * Simplify `insert_text(...)` logic, Fix linuxmint/bulky#45 (#46)
+
+ -- Clement Lefebvre <root@linuxmint.com>  Mon, 05 Sep 2022 15:41:26 +0100
+
+bulky (2.4) vanessa; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Sun, 24 Jul 2022 11:54:24 +0200
+
+bulky (2.3) vanessa; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Sun, 26 Jun 2022 15:45:39 +0200
+
+bulky (2.2) vanessa; urgency=medium
+
+  [ Neinei0k ]
+  * Fix issue #34 (#37)
+
+  [ Vincent Vermeulen ]
+  * Respect insert position when overwrite is enabled (#41)
+
+ -- Clement Lefebvre <root@linuxmint.com>  Fri, 10 Jun 2022 12:02:19 +0200
+
+bulky (2.1) una; urgency=medium
+
+  * l10n: Update translations
+
+ -- Clement Lefebvre <root@linuxmint.com>  Fri, 31 Dec 2021 12:37:41 +0000
+
+bulky (2.0) una; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Update files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Mon, 06 Dec 2021 15:26:11 +0000
+
+bulky (1.9) una; urgency=medium
+
+  [ Michael Webster ]
+  * Handle rename errors and report to the user via info bar.
+  * Never treat folders as though they have extensions.
+
+  [ Clement Lefebvre ]
+  * l10n: Update POT
+
+ -- Clement Lefebvre <root@linuxmint.com>  Mon, 22 Nov 2021 16:35:19 +0000
+
+bulky (1.8) uma; urgency=medium
+
+  [ Michael Webster ]
+  * file picker: Don't lose a multi-selection when enter is pressed.
+  * file picker: Handle file-activated again.
+  * Use uris instead of paths internally, to allow files on remote filesystems to be renamed.
+  * Remove leftover path reference from previous commit.
+  * Rename files before directories, and children before parents.
+
+  [ Vincent Vermeulen ]
+  * preserve whitespace in arguments
+
+  [ Michael Webster ]
+  * Update names in the correct rows after renaming.
+
+ -- Clement Lefebvre <root@linuxmint.com>  Fri, 15 Oct 2021 17:26:02 +0100
+
+bulky (1.7) uma; urgency=medium
+
+  [ Michael Webster ]
+  * Handle invalid regex strings gracefully.
+  * Fix remembering the file chooser's last location.
+
+  [ Clement Lefebvre ]
+  * Remove Ctrl+C shortcut
+
+ -- Clement Lefebvre <root@linuxmint.com>  Fri, 02 Jul 2021 10:33:23 +0100
+
+bulky (1.6) uma; urgency=medium
+
+  * Add button: Let user add both files and folders
+
+ -- Clement Lefebvre <root@linuxmint.com>  Fri, 25 Jun 2021 17:46:05 +0100
+
+bulky (1.5) uma; urgency=medium
+
+  [ Vincent Vermeulen ]
+  * fix extension rename
+
+  [ Clement Lefebvre ]
+  * Clear button: clear path list
+  * l10n: Update translations
+  * l10n: Generate files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Fri, 25 Jun 2021 14:28:09 +0100
+
+bulky (1.4) uma; urgency=medium
+
+  [ Michael Webster ]
+  * bulky.py: Handle escaped uris properly. (#4)
+
+ -- Clement Lefebvre <root@linuxmint.com>  Tue, 15 Jun 2021 11:27:53 +0100
+
+bulky (1.3) uma; urgency=medium
+
+  * l10n: Update translations
+  * l10n: Generate files
+
+ -- Clement Lefebvre <root@linuxmint.com>  Wed, 09 Jun 2021 15:48:09 +0100
+
+bulky (1.2) uma; urgency=medium
+
+  * packaging: Depend on python3-magic
+
+ -- Clement Lefebvre <root@linuxmint.com>  Fri, 04 Jun 2021 16:02:47 +0100
+
+bulky (1.1) uma; urgency=medium
+
+  * Continue implementation
+  * Added a TODO section
+  * Add todo
+  * Implement string removals
+  * Implement string insertions
+  * Implement file add/remove/clear
+  * Prevent adding the same file twice
+  * Hide file buttons if filenames are loaded via sys.argv
+  * Add tooltips on file buttons
+  * Prevent name collisions
+  * Show an error when file permissions are missing
+  * Remove keyboard shortcuts
+  * Improve the look of the treeview
+  * Give the main window a generic title
+  * Implement rename button
+  * Add support for enumerations
+  * Update icon
+  * Menu: Use generic name
+  * l10n: Update POT
+  * Rename: Fix renaming loop
+  * Rename: Only rename when new and old names differ
+  * README: Add a screenshot
+  * Update README.md
+  * l18n: Update POT
+  * Add caja extension
+  * l10n: Update translations
+  * Revert "Add caja extension"
+  * Remove common.py
+  * Support URI (for local files)
+  * Use a different title/subtitle in app and dialog mode
+  * l10n: Update POT
+  * Fix wildcard support
+
+ -- Clement Lefebvre <root@linuxmint.com>  Tue, 25 May 2021 17:50:41 +0100
+
+bulky (1.0.0) ulyssa; urgency=low
+
+  * Initial release
+
+ -- Clement Lefebvre <root@linuxmint.com>  Wed,  19 May 2021 10:03:00 +0000

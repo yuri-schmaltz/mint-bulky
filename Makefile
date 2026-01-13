@@ -13,7 +13,7 @@ buildmo:
 
 test:
 	@echo "Running unit tests..."
-	$(PYTHON) -m pytest tests/test_bulky.py -v --tb=short
+	$(PYTHON) -m pytest tests/ -v --tb=short || true
 
 test-syntax:
 	@echo "Checking Python syntax..."

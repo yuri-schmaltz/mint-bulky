@@ -1,0 +1,10 @@
+Package: bulky
+Version: 4.1
+Architecture: all
+Maintainer: Linux Mint <root@linuxmint.com>
+Installed-Size: 654
+Depends: python3, python3-gi, python3-setproctitle, python3-unidecode, dconf-gsettings-backend | gsettings-backend
+Section: misc
+Priority: optional
+Description: Bulk Renamer
+ Utility application used to rename multiple files.
