@@ -238,6 +238,8 @@ class MainWindow():
         self._thumb_cache_dir = Path(os.path.expanduser("~/.cache/bulky/thumbnails"))
         try:
             self._thumb_cache_dir.mkdir(parents=True, exist_ok=True)
+            # Cleanup old thumbnails on startup
+            self._cleanup_old_thumbnails()
         except Exception as e:
             logger.debug("Failed to create cache dir: %s", str(e))
         self._thumb_pending = set()
@@ -250,6 +252,9 @@ class MainWindow():
         self.window = self.builder.get_object("main_window")
         self.window.set_title(_("Rename..."))
         self.window.set_icon_name("bulky")
+        
+        # Load custom CSS for accessibility and visual focus
+        self._load_custom_css()
 
         # Create variables to quickly access dynamic widgets
         self.headerbar = self.builder.get_object("headerbar")
@@ -283,6 +288,10 @@ class MainWindow():
         # Menubar
         accel_group = Gtk.AccelGroup()
         self.window.add_accel_group(accel_group)
+        
+        # Global keyboard shortcuts
+        self._setup_keyboard_shortcuts(accel_group)
+        
         menu = self.builder.get_object("main_menu")
         
         # Tools submenu
@@ -476,6 +485,84 @@ class MainWindow():
                 logger.debug("Deferred initial load failed: %s", str(e))
             return False
         GLib.idle_add(_deferred_initial_load)
+        
+        # Initialize thread lock for model access
+        self._model_lock = threading.Lock()
+        
+        # Rollback state tracking
+        self._last_rename_backup = []
+        self._last_rename_success = []
+
+    def _setup_keyboard_shortcuts(self, accel_group):
+        """Setup global keyboard shortcuts for improved accessibility."""
+        shortcuts = [
+            ('<Control>n', self.on_add_button),
+            ('<Control>d', self.on_remove_button),
+            ('<Control>r', self.on_rename_button),
+            ('Delete', self.on_remove_button),
+            ('<Control>e', self.on_tool_exif_rename),
+            ('<Control>i', self.on_tool_id3_rename),
+            ('<Control>h', self.on_tool_hash_rename),
+            ('<Control>l', self.on_tool_normalize),  # L for "limpar/clean"
+        ]
+        
+        for accel, handler in shortcuts:
+            key, mod = Gtk.accelerator_parse(accel)
+            if key != 0:  # Valid accelerator
+                accel_group.connect(key, mod, Gtk.AccelFlags.VISIBLE, 
+                                   lambda *args, h=handler: (h(None) or True))
+
+    def _cleanup_old_thumbnails(self, max_age_days=30, max_size_mb=100):
+        """Remove old thumbnails or if cache exceeds max size."""
+        import time
+        
+        try:
+            cache_files = list(self._thumb_cache_dir.glob('*.png'))
+            if not cache_files:
+                return
+            
+            # Calculate total cache size
+            cache_size = sum(f.stat().st_size for f in cache_files)
+            cache_size_mb = cache_size / (1024 * 1024)
+            
+            if cache_size_mb > max_size_mb:
+                logger.info(f"Thumbnail cache is {cache_size_mb:.1f}MB, cleaning...")
+                # Remove oldest files first
+                files = sorted(cache_files, key=lambda f: f.stat().st_mtime)
+                for f in files[:len(files)//2]:  # Remove half of the oldest
+                    try:
+                        f.unlink()
+                    except Exception:
+                        pass
+            
+            # Remove thumbnails older than max_age_days
+            cutoff = time.time() - (max_age_days * 86400)
+            for f in cache_files:
+                try:
+                    if f.stat().st_mtime < cutoff:
+                        f.unlink()
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning(f"Failed to cleanup thumbnails: {e}")
+
+    def _load_custom_css(self):
+        """Load custom CSS for improved accessibility and visual focus."""
+        try:
+            css_path = "/usr/share/bulky/bulky.css"
+            if os.path.exists(css_path):
+                css_provider = Gtk.CssProvider()
+                css_provider.load_from_path(css_path)
+                Gtk.StyleContext.add_provider_for_screen(
+                    Gdk.Screen.get_default(),
+                    css_provider,
+                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                )
+                logger.debug("Custom CSS loaded successfully")
+            else:
+                logger.debug(f"CSS file not found: {css_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load custom CSS: {e}")
 
     def on_drag_data_received(self, widget, context, x, y, data, info, _time, user_data=None):
         if data:
@@ -576,7 +663,8 @@ class MainWindow():
                     try:
                         if pix is not None:
                             try:
-                                self.model.set_value(iter_, COL_PIXBUF, pix)
+                                with self._model_lock:
+                                    self.model.set_value(iter_, COL_PIXBUF, pix)
                             except Exception:
                                 pass
                         self._thumb_pending.discard(file_obj.uri)
@@ -587,6 +675,54 @@ class MainWindow():
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
+
+    def _create_tool_dialog(self, title, widgets, width=400, height=200):
+        """Factory method for creating tool dialogs with consistent styling.
+        
+        Args:
+            title: Dialog title (translatable string)
+            widgets: List of Gtk widgets to add to content area
+            width: Dialog width in pixels
+            height: Dialog height in pixels
+            
+        Returns:
+            Configured Gtk.Dialog ready to be run()
+        """
+        dialog = Gtk.Dialog(
+            title=title,
+            transient_for=self.window,
+            flags=0
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OK, Gtk.ResponseType.OK
+        )
+        dialog.set_default_size(width, height)
+        
+        box = dialog.get_content_area()
+        box.set_spacing(6)
+        box.set_margin_top(12)
+        box.set_margin_bottom(12)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        
+        for widget in widgets:
+            if isinstance(widget, tuple):
+                # (widget, expand, fill, padding)
+                box.pack_start(widget[0], *widget[1:])
+            else:
+                box.pack_start(widget, False, False, 6)
+        
+        box.show_all()
+        return dialog
+
+    def _create_labeled_entry(self, label_text, entry_widget):
+        """Helper to create label + entry horizontal box."""
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        label = Gtk.Label(label=label_text)
+        hbox.pack_start(label, False, False, 0)
+        hbox.pack_start(entry_widget, True, True, 0)
+        return hbox
 
     def on_tool_exif_rename(self, widget):
         """EXIF-based photo renaming tool."""
@@ -608,44 +744,21 @@ class MainWindow():
             dialog.destroy()
             return
         
-        # Dialog for EXIF options
-        dialog = Gtk.Dialog(
-            title=_("Rename by EXIF Date"),
-            transient_for=self.window,
-            flags=0
-        )
-        dialog.add_buttons(
-            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-            Gtk.STOCK_OK, Gtk.ResponseType.OK
-        )
-        dialog.set_default_size(400, 200)
-        
-        box = dialog.get_content_area()
-        box.set_spacing(6)
-        box.set_margin_top(12)
-        box.set_margin_bottom(12)
-        box.set_margin_start(12)
-        box.set_margin_end(12)
-        
-        label = Gtk.Label(label=_("Format: YYYYMMDD_HHMMSS_NNN.ext"))
-        box.pack_start(label, False, False, 0)
-        
-        # Prefix option
-        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        hbox.pack_start(Gtk.Label(label=_("Prefix:")), False, False, 0)
+        # Create widgets
         prefix_entry = Gtk.Entry()
-        prefix_entry.set_text("")
         prefix_entry.set_placeholder_text(_("Optional (e.g., 'vacation_')"))
-        hbox.pack_start(prefix_entry, True, True, 0)
-        box.pack_start(hbox, False, False, 6)
         
-        # Info label
         info_label = Gtk.Label()
         info_label.set_markup(_("<small>Only processes JPEG files with EXIF DateTimeOriginal</small>"))
-        box.pack_start(info_label, False, False, 6)
         
-        box.show_all()
+        widgets = [
+            Gtk.Label(label=_("Format: YYYYMMDD_HHMMSS_NNN.ext")),
+            self._create_labeled_entry(_("Prefix:"), prefix_entry),
+            info_label
+        ]
         
+        # Create and show dialog
+        dialog = self._create_tool_dialog(_("Rename by EXIF Date"), widgets)
         response = dialog.run()
         prefix = prefix_entry.get_text()
         dialog.destroy()
@@ -1072,6 +1185,10 @@ class MainWindow():
         dlg.show()
 
     def on_menu_quit(self, widget):
+        # Log regex cache stats if telemetry is enabled
+        if ENABLE_TELEMETRY:
+            stats = self.get_regex_cache_stats()
+            logger.info(f"Regex cache stats: {stats}")
         self.application.quit()
 
     def on_files_selected(self, selection):
@@ -1162,12 +1279,50 @@ class MainWindow():
                 logger.exception("Error processing file")
 
         rename_list = self.sort_list_by_depth(rename_list)
+        
+        # Calculate actual renames needed
+        actual_renames = sum(1 for tup in rename_list if tup[3] != tup[2])
+        
+        # Show progress bar only for > 10 files
+        show_progress = actual_renames > 10
+        progress_dialog = None
+        progress_bar = None
+        
+        if show_progress:
+            progress_dialog = Gtk.Dialog(
+                title=_("Renaming files..."),
+                transient_for=self.window,
+                modal=True
+            )
+            progress_bar = Gtk.ProgressBar()
+            progress_bar.set_show_text(True)
+            progress_bar.set_margin_top(12)
+            progress_bar.set_margin_bottom(12)
+            progress_bar.set_margin_start(12)
+            progress_bar.set_margin_end(12)
+            content = progress_dialog.get_content_area()
+            content.add(progress_bar)
+            progress_dialog.set_default_size(400, 100)
+            progress_dialog.show_all()
+        
+        # Prepare backup log for rollback
+        backup_log = []
+        for it, file_obj, old_name, new_name in rename_list:
+            backup_log.append((file_obj.uri, old_name))
+        
+        self._last_rename_backup = backup_log
+        self._last_rename_success = []
 
         # Disable button and run asynchronously
         self.rename_button.set_sensitive(False)
-        self.window.set_sensitive(False)
+        if not show_progress:
+            self.window.set_sensitive(False)
+        
+        processed = [0]  # Mutable for closure
+        total = actual_renames
 
         def worker():
+            error_occurred = False
             for tup in rename_list:
                 it, file_obj, name, new_name = tup
                 if new_name != name:
@@ -1175,26 +1330,42 @@ class MainWindow():
                         old_uri = file_obj.uri
                         success = file_obj.rename(new_name)
                         if success:
+                            with self._model_lock:
+                                self._last_rename_success.append((file_obj.uri, old_uri, name))
+                            
                             def apply_update():
                                 try:
-                                    if old_uri in self.uris:
-                                        self.uris.remove(old_uri)
-                                    self.uris.append(file_obj.uri)
-                                    self.model.set_value(it, COL_NAME, new_name)
+                                    with self._model_lock:
+                                        if old_uri in self.uris:
+                                            self.uris.remove(old_uri)
+                                        self.uris.append(file_obj.uri)
+                                        self.model.set_value(it, COL_NAME, new_name)
                                 except Exception:
                                     pass
                                 return False
                             GLib.idle_add(apply_update)
+                            
+                            processed[0] += 1
+                            if show_progress:
+                                GLib.idle_add(lambda p=processed[0]: progress_bar.set_fraction(p / total))
+                                GLib.idle_add(lambda p=processed[0]: progress_bar.set_text(f"{p}/{total}"))
                     except GLib.Error as e:
+                        error_occurred = True
                         def apply_err():
                             self.report_os_error(file_obj, new_name, e)
+                            # Offer rollback
+                            self._offer_rollback()
                             return False
                         GLib.idle_add(apply_err)
                         break
+            
             # Re-enable UI at the end
             def done():
                 try:
-                    self.window.set_sensitive(True)
+                    if show_progress and progress_dialog:
+                        progress_dialog.destroy()
+                    if not show_progress:
+                        self.window.set_sensitive(True)
                     self.rename_button.set_sensitive(False)
                 except Exception:
                     pass
@@ -1202,6 +1373,62 @@ class MainWindow():
             GLib.idle_add(done)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _offer_rollback(self):
+        """Offer to rollback last rename operation if it failed."""
+        if not self._last_rename_success:
+            return
+        
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            flags=0,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.YES_NO,
+            text=_("Rename failed")
+        )
+        dialog.format_secondary_text(
+            _("Some files were renamed before the error.\nRoll back changes?")
+        )
+        response = dialog.run()
+        dialog.destroy()
+        
+        if response == Gtk.ResponseType.YES:
+            self._rollback_last_rename()
+
+    def _rollback_last_rename(self):
+        """Revert last rename operation."""
+        rolled_back = 0
+        failed = 0
+        
+        for (new_uri, old_uri, old_name) in reversed(self._last_rename_success):
+            try:
+                file = Gio.File.new_for_uri(new_uri)
+                file.set_display_name(old_name, None)
+                rolled_back += 1
+            except Exception as e:
+                failed += 1
+                logger.error(f"Rollback failed for {new_uri}: {e}")
+        
+        # Show result
+        if rolled_back > 0:
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text=_("Rollback complete")
+            )
+            msg = _("Rolled back {} files.").format(rolled_back)
+            if failed > 0:
+                msg += _("\n{} files could not be rolled back.").format(failed)
+            dialog.format_secondary_text(msg)
+            dialog.run()
+            dialog.destroy()
+            
+            # Refresh view
+            self.preview_changes()
+        
+        self._last_rename_success = []
 
     def sort_list_by_depth(self, rename_list):
         # Rename files first, followed by directories from deep to shallow.
@@ -1358,8 +1585,29 @@ class MainWindow():
 
     @functools.lru_cache(maxsize=32)
     def _compile_regex(self, pattern, flags):
-        """Cache compiled regex patterns to avoid recompilation."""
-        return re.compile(pattern, flags)
+        """Cache compiled regex patterns to avoid recompilation.
+        
+        Raises:
+            ValueError: If pattern is invalid regex syntax
+        """
+        try:
+            compiled = re.compile(pattern, flags)
+            return compiled
+        except re.error as e:
+            logger.warning(f"Invalid regex '{pattern}': {e}")
+            raise ValueError(f"Invalid regular expression: {e}")
+
+    def get_regex_cache_stats(self):
+        """Get cache hit rate and usage statistics."""
+        info = self._compile_regex.cache_info()
+        hit_rate = info.hits / (info.hits + info.misses) if (info.hits + info.misses) > 0 else 0
+        return {
+            'hits': info.hits,
+            'misses': info.misses,
+            'hit_rate': hit_rate,
+            'size': info.currsize,
+            'maxsize': info.maxsize
+        }
 
     def replace_text(self, index, string):
         case = self.replace_case_check.get_active()
@@ -1374,8 +1622,14 @@ class MainWindow():
         try:
             if regex:
                 flags = 0 if case else re.IGNORECASE
-                reg = self._compile_regex(find, flags)
-                return reg.sub(replace, string)
+                try:
+                    reg = self._compile_regex(find, flags)
+                    return reg.sub(replace, string)
+                except ValueError as e:
+                    # Show error in infobar for invalid regex
+                    GLib.idle_add(lambda: self.infobar.show())
+                    GLib.idle_add(lambda: self.error_label.set_text(str(e)))
+                    return string  # Don't apply substitution
             else:
                 find = find.replace("*", "~~~REGSTAR~~~")
                 find = find.replace("?", "~~~REGQUES~~~")

@@ -156,6 +156,8 @@
                                         <property name="can-focus">True</property>
                                         <property name="receives-default">False</property>
                                         <property name="tooltip-text" translatable="yes">Add files...</property>
+                                        <property name="label" translatable="yes">Add</property>
+                                        <property name="always-show-image">True</property>
                                         <child>
                                           <object class="GtkImage">
                                             <property name="visible">True</property>
@@ -198,6 +200,9 @@
                                         <property name="can-focus">True</property>
                                         <property name="receives-default">False</property>
                                         <property name="tooltip-text" translatable="yes">Clear</property>
+                                        <style>
+                                          <class name="destructive-action"/>
+                                        </style>
                                         <child>
                                           <object class="GtkImage">
                                             <property name="visible">True</property>
@@ -897,6 +902,9 @@
                     <property name="sensitive">False</property>
                     <property name="can-focus">True</property>
                     <property name="receives-default">True</property>
+                    <style>
+                      <class name="suggested-action"/>
+                    </style>
                   </object>
                   <packing>
                     <property name="expand">True</property>
