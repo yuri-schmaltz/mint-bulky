@@ -1,3 +1,5 @@
+PYTHON ?= python3
+
 all: buildmo
 
 buildmo:
@@ -11,16 +13,29 @@ buildmo:
 
 test:
 	@echo "Running unit tests..."
-	python3 -m pytest tests/test_bulky.py -v --tb=short
+	$(PYTHON) -m pytest tests/test_bulky.py -v --tb=short
 
 test-syntax:
 	@echo "Checking Python syntax..."
-	python3 -m py_compile usr/lib/bulky/bulky.py
+	$(PYTHON) -m py_compile usr/lib/bulky/bulky.py
 	@echo "✓ Syntax OK"
 
 lint:
 	@echo "Checking code style..."
-	python3 -m pylint usr/lib/bulky/bulky.py --disable=missing-docstring,too-many-locals 2>/dev/null || echo "⚠ pylint not installed, skipping"
+	$(PYTHON) -m pylint usr/lib/bulky/bulky.py --disable=missing-docstring,too-many-locals 2>/dev/null || echo "⚠ pylint not installed, skipping"
+
+diagnostics:
+	@echo "Running diagnostics..."
+	$(PYTHON) diagnostics.py
+
+smoke:
+	@echo "Running headless smoke test..."
+	$(PYTHON) scripts/smoke_headless.py
+
+ci-check:
+	@echo "Running CI-friendly checks (diagnostics + smoke)..."
+	$(PYTHON) diagnostics.py
+	$(PYTHON) scripts/smoke_headless.py
 
 clean:
 	rm -rf usr/share/locale
@@ -31,6 +46,6 @@ clean:
 
 install-dev:
 	@echo "Installing dev dependencies..."
-	pip3 install pytest pylint 2>/dev/null || echo "Note: Some dev tools require manual install"
+	$(PYTHON) -m pip install pytest pylint 2>/dev/null || echo "Note: Some dev tools require manual install"
 
-.PHONY: all buildmo test test-syntax lint clean install-dev
+.PHONY: all buildmo test test-syntax lint diagnostics smoke clean install-dev

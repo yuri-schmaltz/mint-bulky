@@ -24,18 +24,12 @@ Define acceptable performance thresholds to catch regressions and guide optimiza
 - **Threshold**: Warn if exceeds 100ms
 
 ### Memory Usage
-- **Idle (empty list)**: < 80 MB
-- **Loaded (500 files)**: < 150 MB
-- **Peak (during rename)**: < 200 MB
-- **Measurement**: `ps aux | grep bulky` or valgrind
-
-### Regex Cache Efficiency
-- **Target**: 80%+ cache hit rate on typical workflow
-- **Measurement**: Log cache hits/misses (future work)
+*Start time*: target 2s on reference workstation (GTK available).
+*Idle RAM*: target 80 MB with GUI idle and no selection.
+*Headless smoke*: <200 ms for single rename (scripts/smoke_headless.py).
+*Cache/log size*: <100 MB total (respect BULKY_CACHE_DIR; thumbnails cleaned periodically).
+*Rename throughput*: target 5k files < 5s on SSD; per-file avg < 1 ms (telemetry).
 - **Expected**: Most users reuse 3-5 patterns in one session
-
-## Regression Detection
-
 ### CI Pipeline (Future)
 ```yaml
 - Run performance baseline suite

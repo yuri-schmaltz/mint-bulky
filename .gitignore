@@ -27,3 +27,6 @@ build/
 .venv/
 venv/
 ENV/
+
+# Internacionalização
+*.pot

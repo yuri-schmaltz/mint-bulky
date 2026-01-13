@@ -3,6 +3,7 @@ import gettext
 import gi
 import locale
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import re
 import setproctitle
@@ -15,13 +16,41 @@ import threading
 import hashlib
 from pathlib import Path
 
-# Setup logging
-logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
+# Cache and logging locations
+CACHE_ROOT = Path(os.getenv("BULKY_CACHE_DIR", os.path.expanduser("~/.cache/bulky")))
+LOG_DIR = CACHE_ROOT / "logs"
+
+def _configure_logging():
+    """Set up stream + rotating file logging with env overrides."""
+    CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass  # Fall back to stream-only if directory creation fails
+
+    log_level = os.getenv("BULKY_LOG_LEVEL", "WARNING").upper()
+    level = getattr(logging, log_level, logging.WARNING)
+
+    handlers = [logging.StreamHandler()]
+    try:
+        log_path = LOG_DIR / "bulky.log"
+        handlers.append(RotatingFileHandler(log_path, maxBytes=512 * 1024, backupCount=3))
+    except Exception:
+        pass  # Do not fail startup if file logging cannot be configured
+
+    logging.basicConfig(level=level, format='%(levelname)s: %(message)s', handlers=handlers)
+
+
+_configure_logging()
 logger = logging.getLogger(__name__)
 
 # Performance telemetry (disabled by default, enable via env var)
 ENABLE_TELEMETRY = os.getenv('BULKY_TELEMETRY', '0') == '1'
 _perf_markers = {}
+
+THUMB_DISABLE = os.getenv('BULKY_DISABLE_THUMBS', '0') == '1'
+THUMB_CACHE_MAX_MB = float(os.getenv('BULKY_THUMB_CACHE_MAX_MB', '100'))
+THUMB_CACHE_MAX_AGE_DAYS = int(os.getenv('BULKY_THUMB_CACHE_MAX_AGE_DAYS', '30'))
 
 def mark_time(label):
     """Record timing marker for performance analysis."""
@@ -33,6 +62,8 @@ def elapsed_ms(label):
     if ENABLE_TELEMETRY and label in _perf_markers:
         return (time.time() - _perf_markers[label]) * 1000
     return 0
+
+mark_time("process_start")
 
 # Suppress GTK deprecation warnings
 warnings.filterwarnings("ignore")
@@ -223,7 +254,7 @@ class MyApplication(Gtk.Application):
 class MainWindow():
 
     def __init__(self, application):
-
+        mark_time("ui_init")
         self.application = application
         self.settings = Gio.Settings(schema_id="org.x.bulky")
         self.icon_theme = Gtk.IconTheme.get_default()
@@ -235,11 +266,14 @@ class MainWindow():
         self.last_chooser_location = Gio.File.new_for_path(GLib.get_home_dir())
 
         # Thumbnail cache and async helpers
-        self._thumb_cache_dir = Path(os.path.expanduser("~/.cache/bulky/thumbnails"))
+        self._thumb_cache_dir = CACHE_ROOT / "thumbnails"
+        self._thumb_cache_max_mb = max(1, THUMB_CACHE_MAX_MB)
+        self._thumb_max_age_days = max(1, THUMB_CACHE_MAX_AGE_DAYS)
         try:
             self._thumb_cache_dir.mkdir(parents=True, exist_ok=True)
             # Cleanup old thumbnails on startup
-            self._cleanup_old_thumbnails()
+            self._cleanup_old_thumbnails(max_age_days=self._thumb_max_age_days,
+                                        max_size_mb=self._thumb_cache_max_mb)
         except Exception as e:
             logger.debug("Failed to create cache dir: %s", str(e))
         self._thumb_pending = set()
@@ -493,6 +527,15 @@ class MainWindow():
         self._last_rename_backup = []
         self._last_rename_success = []
 
+        if ENABLE_TELEMETRY:
+            logger.info(
+                "startup_ms=%.1f ui_init_ms=%.1f cache_dir=%s log_dir=%s",
+                elapsed_ms("process_start"),
+                elapsed_ms("ui_init"),
+                self._thumb_cache_dir,
+                LOG_DIR,
+            )
+
     def _setup_keyboard_shortcuts(self, accel_group):
         """Setup global keyboard shortcuts for improved accessibility."""
         shortcuts = [
@@ -582,6 +625,11 @@ class MainWindow():
         pixbuf = model.get_value(iter_, COL_PIXBUF)
         icon = model.get_value(iter_, COL_ICON)
         file_obj = model.get_value(iter_, COL_FILE)
+
+        if THUMB_DISABLE:
+            cell.set_property("surface", None)
+            cell.set_property("gicon", icon)
+            return
 
         if pixbuf is not None:
             surface = Gdk.cairo_surface_create_from_pixbuf(pixbuf, self.window.get_scale_factor())
@@ -1320,6 +1368,7 @@ class MainWindow():
         
         processed = [0]  # Mutable for closure
         total = actual_renames
+        t_start = time.perf_counter()
 
         def worker():
             error_occurred = False
@@ -1367,6 +1416,11 @@ class MainWindow():
                     if not show_progress:
                         self.window.set_sensitive(True)
                     self.rename_button.set_sensitive(False)
+                    if ENABLE_TELEMETRY and total > 0:
+                        elapsed = (time.perf_counter() - t_start) * 1000
+                        per_file = elapsed / total if total else 0
+                        logger.info("rename_batch_ms=%.1f per_file_ms=%.1f count=%d errors=%s",
+                                    elapsed, per_file, total, error_occurred)
                 except Exception:
                     pass
                 return False
